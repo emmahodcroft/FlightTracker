@@ -108,6 +108,8 @@ class Overhead:
                     # Grab and store details
                     try:
                         details = self._api.get_flight_details(flight)
+                        print(flight)
+                        print(details["airline"]["short"])
 
                         # Get plane type
                         try:
@@ -136,6 +138,11 @@ class Overhead:
                             else ""
                         )
 
+                        try:
+                            airline = details["airline"]["short"]
+                        except (KeyError, TypeError):
+                            airline = ""
+
                         data.append(
                             {
                                 "plane": plane,
@@ -144,6 +151,7 @@ class Overhead:
                                 "vertical_speed": flight.vertical_speed,
                                 "altitude": flight.altitude,
                                 "callsign": callsign,
+                                "airline": airline,
                             }
                         )
                         break
