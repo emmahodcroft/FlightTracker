@@ -23,7 +23,11 @@ class PlaneDetailsScene(object):
         if len(self._data) == 0:
             return
 
-        plane = f'{self._data[self._data_index]["airline"]} - {self._data[self._data_index]["plane"]}'
+        airline = self._data[self._data_index]["airline"]
+        if airline:
+            plane = f'{airline} - {self._data[self._data_index]["plane"]}'
+        else:
+            plane = f'{self._data[self._data_index]["plane"]}'
 
         # Draw background
         self.draw_square(

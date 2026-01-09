@@ -109,7 +109,6 @@ class Overhead:
                     try:
                         details = self._api.get_flight_details(flight)
                         print(flight)
-                        print(details["airline"]["short"])
 
                         # Get plane type
                         try:
