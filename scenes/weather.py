@@ -1,4 +1,5 @@
 import urllib.request
+import urllib.parse
 import datetime
 import time
 import json
@@ -9,6 +10,7 @@ from utilities.animator import Animator
 from setup import colours, fonts, frames
 from config import WEATHER_LOCATION
 import sys
+import os
 
 # Attempt to load config data
 try:
@@ -43,7 +45,10 @@ if TEMPERATURE_UNITS != "metric" and TEMPERATURE_UNITS != "imperial":
 WEATHER_API_URL = "https://taps-aff.co.uk/api/"
 OPENWEATHER_API_URL = "https://api.openweathermap.org/data/2.5/"
 WEATHER_RETRIES = 3
-
+# Newer API for future weather
+OPENWEATHER_GEO_URL = "http://api.openweathermap.org/geo/1.0/direct?"
+OPENWEATHER_ONECALL_URL = "https://api.openweathermap.org/data/3.0/onecall?"
+ONECALL_3_URL = "https://api.openweathermap.org/data/3.0/onecall?"
 
 # Scene Setup
 RAINFALL_REFRESH_SECONDS = 300
@@ -55,10 +60,14 @@ RAINFALL_GRAPH_HEIGHT = 8
 RAINFALL_MAX_VALUE = 3  # mm
 RAINFALL_OVERSPILL_FLASH_ENABLED = True
 
-TEMPERATURE_REFRESH_SECONDS = 60
-TEMPERATURE_FONT = fonts.extrasmall
-TEMPERATURE_FONT_HEIGHT = 5
-TEMPERATURE_POSITION = (48, TEMPERATURE_FONT_HEIGHT + 1)
+TEMPERATURE_REFRESH_SECONDS = 120 #put up from 60 to avoid too many calls in a day
+TEMPERATURE_FONT = fonts.regular
+TEMPERATURE_FONT_HEIGHT = 6
+TEMPERATURE_POSITION = (40, TEMPERATURE_FONT_HEIGHT + 4)
+
+FUTURE_TEMPERATURE_FONT = fonts.extrasmall
+FUTURE_TEMPERATURE_FONT_HEIGHT = 6
+FUTURE_TEMPERATURE_POSITION = (10, TEMPERATURE_POSITION[1] + 6)
 
 TEMPERATURE_COLOURS = (
     (0, colours.WHITE),
@@ -67,6 +76,270 @@ TEMPERATURE_COLOURS = (
     (18, colours.YELLOW),
     (30, colours.ORANGE),
 )
+
+# For drawing Icons (Emma)
+FORECAST_ICON_POSITION = (52, 20)  # top-left corner of an 10x10 sprite - move 2 pixels larger if doing 8x8
+FORECAST_ICON_SIZE = 11
+
+SPRITES_11x11 = {
+    "clear": [
+        ".    .    .",
+        " .   .   . ",
+        "  .     .  ",
+        "    ...    ",
+        "   .....   ",
+        ".. ..... ..",
+        "   .....   ",
+        "    ...    ",
+        "  .     .  ",
+        " .   .   . ",
+        ".    .    .",
+    ],
+    "few-clouds": [
+        "    .    . ",
+        ".   .   .  ",
+        " .     .   ",
+        "   ...     ",
+        "  .....    ",
+        ". ....     ",
+        "  ...   ...",
+        "   .  .....",
+        " .   ......",
+        ".    ......",
+        "      .....",
+    ],
+    "scattered-clouds": [
+        "  .  .  .  ",
+        "   .   .   ",
+        "    ...    ",
+        " . ..... . ",
+        "           ",
+        "   .....   ",
+        "  .......  ",
+        " ......... ",
+        " ......... ",
+        "  .......  ",
+        "           ",
+    ],
+    "clouds": [
+        "           ",
+        "      ..   ",
+        "     ....  ",
+        "   ....... ",
+        "  ........ ",
+        " ..........",
+        "...........",
+        "...........",
+        " ..........",
+        "  ........ ",
+        "   ......  ",
+       # "           ", # hollow cloud - like less
+       # "      ..   ",
+       # "     .  .  ",
+       # "   ..    . ",
+       # "  .      . ",
+       # " .        .",
+       # ".         .",
+       # ".         .",
+       # " .        .",
+       # "  .      . ",
+       # "   ......  ",
+        #"           ", # old cloud
+        #"   .....   ",
+        #"  .......  ",
+        #" ......... ",
+        #"...........",
+        #"...........",
+        #" ......... ",
+        #"  .......  ",
+        #"           ",
+        #"           ",
+        #"           ",
+    ],
+    "showers": [
+        "   .....   ",
+        "  .......  ",
+        " ......... ",
+        "...........",
+        "...........",
+        " ......... ",
+        "  .  .  .  ",
+        "           ",
+        ".  .  .  . ",
+        "           ",
+        "  .  .  .  ",
+    ],
+    "rain": [
+        "   .....   ",
+        "  .......  ",
+        " ......... ",
+        "...........",
+        "...........",
+        " ......... ",
+        "  . . . .  ",
+        " . . . . . ",
+        "  . . . .  ",
+        " . . . . . ",
+        "  . . . .  ",
+    ],
+    "snow": [
+        "     .     ",
+        "           ",
+        "   . . .   ",
+        "  .. . ..  ",
+        "    . .    ",
+        ". .. . .. .",
+        "    . .    ",
+        "  .. . ..  ",
+        "   . . .   ",
+        "           ",
+        "     .     ",
+    ],
+    "thunder": [
+        "   .....   ",
+        "  .......  ",
+        " ......... ",
+        ".......... ",
+        "   ....    ",
+        "   ..      ",
+        "  ....     ",
+        "    ..     ",
+        "   ..      ",
+        "   .       ",
+        "           ",
+    ],
+    "mist": [
+        "   .  .  . ",
+        " .. .. .. .",
+        "           ",
+        "   .  .  . ",
+        " .. .. .. .",
+        "           ",
+        "   .  .  . ",
+        " .. .. .. .",
+        "           ",
+        "   .  .  . ",
+        " .. .. .. .",
+    ],
+    "unknown": [
+        "  .......  ",
+        " ......... ",
+        "..      .. ",
+        "      ...  ",
+        "    ...    ",
+        "   ..      ",
+        "           ",
+        "   ..      ",
+        "   ..      ",
+        "   ..      ",
+        "           ",
+    ],
+}
+
+
+SPRITES_8x8 = {
+    "clear": [
+        ".  .  . ",
+        " .   .  ",
+        "  ...   ",
+        ". ... . ",
+        "  ...   ",
+        " .   .  ",
+        ".  .  . ",
+        "   .    ",
+    ],
+    "clouds": [
+        "        ",
+        "  ....  ",
+        " ...... ",
+        "........",
+        "........",
+        " ...... ",
+        "        ",
+        "        ",
+    ],
+    "rain": [
+        "  ....  ",
+        " ...... ",
+        "........",
+        "........",
+        " ...... ",
+        "  .  . .",
+        " .  .  .",
+        "  .  .  ",
+    ],
+    "snow": [
+        "   .    ",
+        " . . .  ",
+        "  ...  .",
+        "... ... ",
+        "  ...  .",
+        " . . .  ",
+        "   .    ",
+        "        ",
+    ],
+    "thunder": [
+        "  ....  ",
+        " ...... ",
+        "........",
+        "  ..    ",
+        " ....   ",
+        "   ..   ",
+        "  ..    ",
+        "        ",
+    ],
+    "mist": [
+        "        ",
+        " ...... ",
+        "        ",
+        " ...... ",
+        "        ",
+        " ...... ",
+        "        ",
+        "        ",
+    ],
+    "unknown": [
+        " ...... ",
+        "..    ..",
+        "    ... ",
+        "   ..   ",
+        "  ..    ",
+        "        ",
+        "  ..    ",
+        "        ",
+    ],
+}
+
+# This helps to test all sprites manually:
+def get_icon_override_category():
+    """
+    Returns a sprite category override from env var, or None.
+    Use like: FORECAST_ICON_OVERRIDE=rain
+    """
+    override = os.environ.get("FORECAST_ICON_OVERRIDE")
+    if not override:
+        return None
+    override = override.strip().lower()
+    if override in SPRITES_11x11 or override in SPRITES_8x8:
+        return override
+    return None
+
+
+def draw_sprite(canvas, x, y, sprite, colour):
+    """Draw an 8x8 sprite where non-space characters are 'on' pixels."""
+    for row, line in enumerate(sprite):
+        for col, ch in enumerate(line):
+            if ch != " ":
+                canvas.SetPixel(x + col, y + row, colour.red, colour.green, colour.blue)
+
+def clear_sprite(canvas, x, y, sprite):
+    for row, line in enumerate(sprite):
+        for col, ch in enumerate(line):
+            if ch != " ":
+                canvas.SetPixel(x + col, y + row, 0, 0, 0)
+
+
+
 
 # Cache grabbing weather data
 class WeatherError(Exception):
@@ -181,6 +454,88 @@ def grab_current_temperature_openweather(location, apikey, units):
 
     return current_temp
 
+#by Emma, with ChatGPT, map icon code to weather conditions to draw icon later
+def icon_category(icon_code: str) -> str:
+    if not icon_code or len(icon_code) < 2:
+        return "unknown"
+    base = icon_code[:2]
+    return {
+        "01": "clear",
+        "02": "few-clouds",
+        "03": "scattered-clouds",
+        "04": "clouds",
+        "09": "showers",
+        "10": "rain",
+        "11": "thunder",
+        "13": "snow",
+        "50": "mist",
+    }.get(base, "unknown")
+
+#by Emma, with ChatGPT (new API call needs lat/long not location)
+def geocode_location(location, apikey):
+    params = {
+        "q": location,
+        "limit": 1,
+        "appid": apikey,
+    }
+    url = OPENWEATHER_GEO_URL + urllib.parse.urlencode(params)
+    raw = urllib.request.urlopen(url, timeout=3).read()
+    results = json.loads(raw.decode("utf-8"))
+    if not results:
+        raise WeatherError(f"Could not geocode location '{location}'")
+    return results[0]["lat"], results[0]["lon"]
+
+#by Emma, with ChatGPT
+def grab_next_two_hours_temperature_openweather(location, apikey, units):
+    lat, lon = geocode_location(location, apikey)
+
+    params = {
+        "lat": lat,
+        "lon": lon,
+        "exclude": "minutely,daily,alerts",
+        "appid": apikey,
+        "units": units,
+    }
+    url = ONECALL_3_URL + urllib.parse.urlencode(params)
+
+    raw = urllib.request.urlopen(url, timeout=3).read()
+    content = json.loads(raw.decode("utf-8"))
+
+    # current temperature:
+    current_temp = content["current"]["temp"]
+
+    # hourly forecast (next hours):
+    hourly = content.get("hourly", [])
+    if len(hourly) < 3:
+        raise WeatherError("Hourly forecast missing or too short")
+
+    hour2 = hourly[2]
+    temp2 = hour2["temp"]
+    
+    # get offset for time
+    tz_offset = content.get("timezone_offset", 0)  # seconds
+    dt_local = hour2["dt"] + tz_offset
+    time_str = time.strftime("%H:%M", time.gmtime(dt_local))
+
+    # grab icon code
+    icon = hour2["weather"][0].get("icon")
+
+    return (time_str, temp2, icon)
+    #temp_plus_1h = hourly[1]["temp"]
+    #temp_plus_2h = hourly[2]["temp"]
+
+    # Optional: convert dt to readable UTC time for display/debug
+    #dt_plus_1h = datetime.datetime.fromtimestamp(hourly[1]["dt"], tz=datetime.timezone.utc)
+    #dt_plus_2h = datetime.datetime.fromtimestamp(hourly[2]["dt"], tz=datetime.timezone.utc)
+
+    # return [hourly[1]["temp"], hourly[2]["temp"]]
+    # older more complex version that returns all 3 - not compatible with rest of code
+    #return {
+    #    "current": current_temp,
+    #    "plus_1h": {"dt": dt_plus_1h, "temp": temp_plus_1h},
+    #    "plus_2h": {"dt": dt_plus_2h, "temp": temp_plus_2h},
+    #}
+
 
 class WeatherScene(object):
     def __init__(self):
@@ -188,6 +543,8 @@ class WeatherScene(object):
         self._last_upcoming_rain_and_temp = None
         self._last_temperature = None
         self._last_temperature_str = None
+        #Emma, related to sprite/icon drawing
+        self._last_forecast_icon_cat = None
 
         # Attempt to grab the current temperature using OPENWEATHER if a key
         # is provided otherwise fallback on the taps-aff service
@@ -197,6 +554,15 @@ class WeatherScene(object):
                 )] if OPENWEATHER_API_KEY else [] ),
             lambda: grab_current_temperature(WEATHER_LOCATION, TEMPERATURE_UNITS)
         ]
+
+        # Attempt by Emma with GPT to get next 2 hours of weather forecast
+        self._forecast_providers = [
+            *(
+               [lambda: grab_next_two_hours_temperature_openweather(
+                    WEATHER_LOCATION, OPENWEATHER_API_KEY, TEMPERATURE_UNITS
+               )] if OPENWEATHER_API_KEY  else [] ),
+        ]
+
 
     def colour_gradient(self, colour_A, colour_B, ratio):
         return graphics.Color(
@@ -345,6 +711,15 @@ class WeatherScene(object):
                 except WeatherError:
                     continue
 
+            # by Emma & ChatGPT - get future forecast refresh (separate chain)
+            self.future_temperatures = None
+            for forecast in self._forecast_providers:
+                 try:
+                     self.future_temperatures = forecast()
+                     break
+                 except WeatherError:
+                     continue
+
         if self._last_temperature_str is not None:
             # Undraw old temperature
             _ = graphics.DrawText(
@@ -355,6 +730,48 @@ class WeatherScene(object):
                 colours.BLACK,
                 self._last_temperature_str,
             )
+
+        # by Emma
+        if getattr(self, "_last_future_temp_str", None) is not None:
+            # Undraw old future temperature
+            _ = graphics.DrawText(
+                self.canvas,
+                FUTURE_TEMPERATURE_FONT,
+                FUTURE_TEMPERATURE_POSITION[0],
+                FUTURE_TEMPERATURE_POSITION[1],
+                colours.BLACK,
+                self._last_future_temp_str,
+            )
+
+        # by Emma - undraw old icon
+        # Undraw old forecast icon (prevents ghosting)
+        if self._last_forecast_icon_cat is not None:
+            old_sprite = SPRITES_8x8.get(self._last_forecast_icon_cat, SPRITES_8x8["unknown"])
+            clear_sprite(self.canvas, FORECAST_ICON_POSITION[0], FORECAST_ICON_POSITION[1], old_sprite)
+            self._last_forecast_icon_cat = None
+
+
+        if self.future_temperatures:
+            forecast_time, forecast_temp, forecast_icon = self.future_temperatures
+            future_str = f"+2h {forecast_time}: {round(forecast_temp)}°"
+            _ = graphics.DrawText(
+                self.canvas,
+                FUTURE_TEMPERATURE_FONT,
+                FUTURE_TEMPERATURE_POSITION[0],
+                FUTURE_TEMPERATURE_POSITION[1],
+                colours.WHITE,
+                future_str,
+            )
+            self._last_future_temp_str = future_str
+
+            # by Emma - draw icon in bottom-right
+            override_cat = get_icon_override_category() # allow override manually to test sprites/icons
+            cat = override_cat if override_cat else icon_category(forecast_icon)
+            sprite = SPRITES_11x11.get(cat, SPRITES_11x11["unknown"])
+            draw_sprite(self.canvas, FORECAST_ICON_POSITION[0], FORECAST_ICON_POSITION[1], sprite, colours.WHITE)
+            self._last_forecast_icon_cat = cat
+
+
 
         if self.current_temperature:
             temp_str = f"{round(self.current_temperature)}°".rjust(4, " ")

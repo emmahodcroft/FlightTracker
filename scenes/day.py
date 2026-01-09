@@ -26,7 +26,7 @@ class DayScene(object):
             # If there's no data to display
             # then draw the day
             now = datetime.now()
-            current_day = now.strftime("%A")
+            current_day = now.strftime("%a") # Modified by Emma (from %A) - show only short day (Thu) above date
 
             # Only draw if time needs updated
             if self._last_day != current_day:
