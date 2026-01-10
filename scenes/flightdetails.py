@@ -44,11 +44,21 @@ class FlightDetailsScene(object):
 
         # Draw flight number if available
         flight_no_text_length = 0
+        # Emma - if have flight number use this, otherwise use call sign
+        flight_no = None
         if (
+            self._data[self._data_index]["flight_number"]
+            and self._data[self._data_index]["flight_number"] != ""
+        ):
+            flight_no = f'{self._data[self._data_index]["flight_number"]}'
+        elif (
             self._data[self._data_index]["callsign"]
-            and self._data[self._data_index]["callsign"] != "N/A"
+            and self._data[self._data_index]["callsign"] != ""
         ):
             flight_no = f'{self._data[self._data_index]["callsign"]}'
+
+
+        if (flight_no is not None):
 
             for ch in flight_no:
                 ch_length = graphics.DrawText(

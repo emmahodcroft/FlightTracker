@@ -137,10 +137,17 @@ class Overhead:
                             else ""
                         )
 
+                        # Emma - try to get airline to display
                         try:
                             airline = details["airline"]["short"]
                         except (KeyError, TypeError):
                             airline = ""
+
+                        # Emma - tr yto get flight number
+                        try:
+                            flightnumber = details["identification"]["number"]["default"]
+                        except (KeyError, TypeError):
+                            flightnumber = ""
 
                         data.append(
                             {
@@ -151,6 +158,7 @@ class Overhead:
                                 "altitude": flight.altitude,
                                 "callsign": callsign,
                                 "airline": airline,
+                                "flight_number": flightnumber,
                             }
                         )
                         break
