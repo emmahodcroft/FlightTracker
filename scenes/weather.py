@@ -63,11 +63,15 @@ RAINFALL_OVERSPILL_FLASH_ENABLED = True
 TEMPERATURE_REFRESH_SECONDS = 120 #put up from 60 to avoid too many calls in a day
 TEMPERATURE_FONT = fonts.regular
 TEMPERATURE_FONT_HEIGHT = 6
-TEMPERATURE_POSITION = (40, TEMPERATURE_FONT_HEIGHT + 4)
+TEMPERATURE_POSITION = (40, TEMPERATURE_FONT_HEIGHT + 2)
+DEGREE_FONT = fonts.extrasmall # small font for the degree symbol in current temp
+DEGREE_X_OFFSET = 1 # pixels to the right of the number
+DEGREE_Y_OFFSET = -2  # pixels relative to number baseline (tweak -2..0)
 
 FUTURE_TEMPERATURE_FONT = fonts.extrasmall
 FUTURE_TEMPERATURE_FONT_HEIGHT = 6
-FUTURE_TEMPERATURE_POSITION = (10, TEMPERATURE_POSITION[1] + 6)
+FUTURE_TEMPERATURE_POSITION = (10, TEMPERATURE_POSITION[1] + 7)
+DIM_WHITE = graphics.Color(180, 180, 180)
 
 TEMPERATURE_COLOURS = (
     (0, colours.WHITE),
@@ -324,6 +328,11 @@ def get_icon_override_category():
         return override
     return None
 
+# This clears a rectangle to ensure clean redrawing
+def clear_rect(canvas, x, y, w, h):
+    for yy in range(y, y + h):
+        for xx in range(x, x + w):
+            canvas.SetPixel(xx, yy, 0, 0, 0)
 
 def draw_sprite(canvas, x, y, sprite, colour):
     """Draw an 8x8 sprite where non-space characters are 'on' pixels."""
@@ -521,20 +530,6 @@ def grab_next_two_hours_temperature_openweather(location, apikey, units):
     icon = hour2["weather"][0].get("icon")
 
     return (time_str, temp2, icon)
-    #temp_plus_1h = hourly[1]["temp"]
-    #temp_plus_2h = hourly[2]["temp"]
-
-    # Optional: convert dt to readable UTC time for display/debug
-    #dt_plus_1h = datetime.datetime.fromtimestamp(hourly[1]["dt"], tz=datetime.timezone.utc)
-    #dt_plus_2h = datetime.datetime.fromtimestamp(hourly[2]["dt"], tz=datetime.timezone.utc)
-
-    # return [hourly[1]["temp"], hourly[2]["temp"]]
-    # older more complex version that returns all 3 - not compatible with rest of code
-    #return {
-    #    "current": current_temp,
-    #    "plus_1h": {"dt": dt_plus_1h, "temp": temp_plus_1h},
-    #    "plus_2h": {"dt": dt_plus_2h, "temp": temp_plus_2h},
-    #}
 
 
 class WeatherScene(object):
@@ -543,6 +538,9 @@ class WeatherScene(object):
         self._last_upcoming_rain_and_temp = None
         self._last_temperature = None
         self._last_temperature_str = None
+        #Emma, related to drawing degree symbol on current temp slightly lower
+        self._last_degree_x = None
+        self._last_degree_y = None
         #Emma, related to sprite/icon drawing
         self._last_forecast_icon_cat = None
 
@@ -731,6 +729,19 @@ class WeatherScene(object):
                 self._last_temperature_str,
             )
 
+        # by Emma - undraw old degree symbol
+        if self._last_degree_x is not None and self._last_degree_y is not None:
+            _ = graphics.DrawText(
+                self.canvas,
+                DEGREE_FONT,
+                self._last_degree_x,
+                self._last_degree_y,
+                colours.BLACK,
+                "°",
+            )
+            self._last_degree_x = None
+            self._last_degree_y = None
+
         # by Emma
         if getattr(self, "_last_future_temp_str", None) is not None:
             # Undraw old future temperature
@@ -749,6 +760,14 @@ class WeatherScene(object):
             old_sprite = SPRITES_8x8.get(self._last_forecast_icon_cat, SPRITES_8x8["unknown"])
             clear_sprite(self.canvas, FORECAST_ICON_POSITION[0], FORECAST_ICON_POSITION[1], old_sprite)
             self._last_forecast_icon_cat = None
+        # Ensure it's really erased by drawing a clear rectangle
+        clear_rect(
+            self.canvas,
+            FORECAST_ICON_POSITION[0],
+            FORECAST_ICON_POSITION[1],
+            FORECAST_ICON_SIZE,
+            FORECAST_ICON_SIZE,
+        )
 
 
         if self.future_temperatures:
@@ -759,7 +778,7 @@ class WeatherScene(object):
                 FUTURE_TEMPERATURE_FONT,
                 FUTURE_TEMPERATURE_POSITION[0],
                 FUTURE_TEMPERATURE_POSITION[1],
-                colours.WHITE,
+                DIM_WHITE, #colours.WHITE,
                 future_str,
             )
             self._last_future_temp_str = future_str
@@ -768,25 +787,51 @@ class WeatherScene(object):
             override_cat = get_icon_override_category() # allow override manually to test sprites/icons
             cat = override_cat if override_cat else icon_category(forecast_icon)
             sprite = SPRITES_11x11.get(cat, SPRITES_11x11["unknown"])
-            draw_sprite(self.canvas, FORECAST_ICON_POSITION[0], FORECAST_ICON_POSITION[1], sprite, colours.WHITE)
+            draw_sprite(self.canvas, FORECAST_ICON_POSITION[0], FORECAST_ICON_POSITION[1], sprite, DIM_WHITE)
             self._last_forecast_icon_cat = cat
 
 
 
         if self.current_temperature:
-            temp_str = f"{round(self.current_temperature)}°".rjust(4, " ")
+            #temp_str = f"{round(self.current_temperature)}°".rjust(4, " ")
+            num_str = f"{round(self.current_temperature)}".rjust(3, " ")
 
             temp_colour = self.temperature_to_colour(self.current_temperature)
 
             # Draw temperature
-            _ = graphics.DrawText(
+           # _ = graphics.DrawText(
+           #     self.canvas,
+           #     TEMPERATURE_FONT,
+           #     TEMPERATURE_POSITION[0],
+           #     TEMPERATURE_POSITION[1],
+           #     temp_colour,
+           #     temp_str,
+           # )
+
+            # Draw temp number
+            num_width = graphics.DrawText(
                 self.canvas,
                 TEMPERATURE_FONT,
                 TEMPERATURE_POSITION[0],
                 TEMPERATURE_POSITION[1],
                 temp_colour,
-                temp_str,
+                num_str,
+            )
+            # draw degree symbols in smaller font, positioned next to number
+            deg_x = TEMPERATURE_POSITION[0] + num_width + DEGREE_X_OFFSET
+            deg_y = TEMPERATURE_POSITION[1] + DEGREE_Y_OFFSET
+
+            _ = graphics.DrawText(
+                self.canvas,
+                DEGREE_FONT,
+                deg_x,
+                deg_y,
+                temp_colour,
+                "°",
             )
 
+            #save for undrawing next frame
             self._last_temperature = self.current_temperature
-            self._last_temperature_str = temp_str
+            self._last_temperature_str = num_str #temp_str
+            self._last_degree_x = deg_x
+            self._last_degree_y = deg_y
