@@ -1,4 +1,5 @@
 import sys
+import datetime
 
 from setup import frames
 from utilities.animator import Animator
@@ -25,20 +26,33 @@ def callsigns_match(flights_a, flights_b):
 
     return callsigns_a == callsigns_b
 
-
+# Emma modified to add brightness/dim/off settings for changes over time
 try:
     # Attempt to load config data
     from config import (
         BRIGHTNESS,
         GPIO_SLOWDOWN,
-        HAT_PWM_ENABLED
+        HAT_PWM_ENABLED,
+        BRIGHTNESS_DAY,
+        BRIGHTNESS_DIM,
+        DIM_START_HOUR,
+        DIM_END_HOUR,
+        OFF_START_HOUR,
+        OFF_END_HOUR,
     )
 
-except (ModuleNotFoundError, NameError):
+except (ModuleNotFoundError, NameError, ImportError):
     # If there's no config data
     BRIGHTNESS = 100
     GPIO_SLOWDOWN = 1
     HAT_PWM_ENABLED = True
+
+    BRIGHTNESS_DAY = BRIGHTNESS
+    BRIGHTNESS_DIM = 50
+    DIM_START_HOUR = 19
+    DIM_END_HOUR = 8
+    OFF_START_HOUR = 21
+    OFF_END_HOUR = 7
 
 try:
     # Attempt to load experimental config data
@@ -48,6 +62,20 @@ except (ModuleNotFoundError, NameError, ImportError):
     # If there's no experimental config data
     LOADING_LED_ENABLED = False
 
+
+#Emma & ChatGPT - add helpers to track time and adjust brightness/display
+def _minutes_since_midnight(dt: datetime.datetime) -> int:
+    return dt.hour * 60 + dt.minute
+
+def _in_window(now_min: int, start_hour: int, end_hour: int) -> bool:
+    """True if now is in [start, end) where window may cross midnight."""
+    start = start_hour * 60
+    end = end_hour * 60
+    if start < end:
+        return start <= now_min < end
+    else:
+        # crosses midnight
+        return now_min >= start or now_min < end
 
 class Display(
     WeatherScene,
@@ -81,9 +109,18 @@ class Display(
         options.drop_privileges = True
         self.matrix = RGBMatrix(options=options)
 
+        # Emma - set up brightness/dim/off
+        self._screen_off = False
+        self._brightness_current = BRIGHTNESS_DAY
+        self.matrix.brightness = self._brightness_current
+
         # Setup canvas
         self.canvas = self.matrix.CreateFrameCanvas()
         self.canvas.Clear()
+
+        # Emma - create black canvas for 'off'
+        self.black_canvas = self.matrix.CreateFrameCanvas()
+        self.black_canvas.Clear()
 
         # Data to render
         self._data_index = 0
@@ -138,10 +175,42 @@ class Display(
             if reset_required:
                 self.reset_scene()
 
+    @Animator.KeyFrame.add(frames.PER_SECOND * 60)
+    def power_management(self, count):
+        # Emma - adds a power-management feature to control brightness/dim/off display
+        now = datetime.datetime.now()
+        now_min = _minutes_since_midnight(now)
+
+        off = _in_window(now_min, OFF_START_HOUR, OFF_END_HOUR)
+        dim = _in_window(now_min, DIM_START_HOUR, DIM_END_HOUR)
+
+        if off:
+            target_brightness = 0
+            screen_off = True
+        elif dim:
+            target_brightness = BRIGHTNESS_DIM
+            screen_off = False
+        else:
+            target_brightness = BRIGHTNESS_DAY
+            screen_off = False
+
+        # Apply only if something changed
+        if screen_off != self._screen_off:
+            self._screen_off = screen_off
+
+        if target_brightness != self._brightness_current:
+            self.matrix.brightness = target_brightness
+            self._brightness_current = target_brightness
+
     @Animator.KeyFrame.add(1)
     def sync(self, count):
-        # Redraw screen every frame
-        _ = self.matrix.SwapOnVSync(self.canvas)
+        # Emma - modify so that during off window, nothing is displayed
+        if getattr(self, "_screen_off", False):
+            _ = self.matrix.SwapOnVSync(self.black_canvas)
+        else: #    self.canvas.Clear()
+            _ = self.matrix.SwapOnVSync(self.canvas)
+        #Original: # Redraw screen every frame
+        #_ = self.matrix.SwapOnVSync(self.canvas)
 
     @Animator.KeyFrame.add(frames.PER_SECOND * 30)
     def grab_new_data(self, count):
